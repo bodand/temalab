@@ -1,4 +1,5 @@
 .SUFFIXES: .tex .aux .pdf .pikchr .svg .tikz .png .eps
+.DEFAULT_GOAL := build
 
 XETEX ?= xetex
 PIKCHR ?= pikchr
