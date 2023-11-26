@@ -1,0 +1,78 @@
+% Color support
+% Code is mostly stolen as-is from https://tex.stackexchange.com/a/207307
+
+\newif\ifpdfmode
+
+\begingroup\expandafter\expandafter\expandafter\endgroup
+\expandafter\ifx\csname pdfoutput\endcsname\relax
+\else
+  \ifnum\pdfoutput>0 %
+    \expandafter\expandafter\expandafter\pdfmodetrue
+  \fi
+\fi
+
+\edef\colordef#1to#2r#3g#4b{%
+  \ifpdfmode
+		\expandafter\xdef#1{#2 #2 #3 rg #1 #2 #3 RG}
+  \else
+		\expandafter\xdef#1{rgb #2 #3 #4}
+  \fi
+}
+
+\edef\currentcolor{%
+  \ifpdfmode
+    0 g 0 G%
+  \else
+    gray 0%
+  \fi
+}
+
+\edef\resetcolor{%
+  \ifpdfmode
+    \noexpand\pdfcolorstackpop
+  \else
+    \special{color pop}%
+  \fi
+}
+
+\colordef\colorblue to 0r 0g 1b
+\colordef\colorred to 0.6r 0g 0.5b
+
+\begingroup\expandafter\expandafter\expandafter\endgroup
+\expandafter\ifx\csname pdfcolorstack\endcsname\relax
+  \ifpdfmode
+    \def\pdfcolorstackpush{\pdfliteral{\currentcolor}}%
+    \let\pdfcolorstackpop\pdfcolorstackpush
+  \fi
+\else
+  \chardef\colorstack=0 %
+  \def\pdfcolorstackpush{%
+    \pdfcolorstack\colorstackcnt push{\currentcolor}%
+  }%
+  \def\pdfcolorstackpop{%
+    \pdfcolorstack\colorstackcnt pop\relax%
+  }%
+\fi
+
+\edef\color#1{%
+  \begingroup\noexpand\expandafter\noexpand\expandafter\noexpand\expandafter\endgroup
+  \noexpand\expandafter\noexpand\ifx\noexpand\csname color#1\noexpand\endcsname\relax
+    \def\noexpand\currentcolor{#1}%
+  \noexpand\else
+    \noexpand\expandafter\let\noexpand\expandafter\noexpand\currentcolor
+      \noexpand\csname color#1\noexpand\endcsname
+  \noexpand\fi
+  \ifpdfmode
+    \noexpand\pdfcolorstackpush
+  \else
+    \special{color push \noexpand\currentcolor}%
+  \fi
+  \aftergroup\noexpand\resetcolor
+}
+
+\newbox\coloringbox
+\def\ascolor[#1]#2{%
+	\setbox\coloringbox=\hbox{\begingroup\color{#1}#2\endgroup}%
+	\box\coloringbox%
+}
+

@@ -1,0 +1,259 @@
+\input tikz.tex
+\usetikzlibrary{intersections,arrows,angles,quotes,calc,decorations.pathmorphing,backgrounds,positioning,fit,petri}
+\input epsf
+
+\input{bodand.tex} 
+
+\input{hyp.tex}
+
+\def\in{\bold{in}\space}
+\def\inp{\bold{inp}\space}
+\def\rd{\bold{rd}\space}
+\def\rdp{\bold{rdp}\space}
+\def\out{\bold{out}\space}
+\def\eval{\bold{eval}\space}
+
+\titlepage{Témalaboratórium jegyzőkönyv}%
+{Linda nyelv megvalósításához memóriarezidens elosztott adatbázis}%
+by{Bodor András}%
+date{2023/2024 Tanév 1. Félév}
+
+\section[Feladatleírás]
+
+A feladat a Linda nevű nyelv megvalósításához szükséges adatbázis elkészítése.
+Ennek az adatbázisnak az elsődleges feladata, hogy a futó processzek között a tárolt elemek a szinkronizációját karban tartsa, erős konzisztencia biztosításával.
+Az adatbázis csak egy-egy konkrét lefutásban szükséges, hogy tárolja az adatokat, így nem kell diszkre írni, csupán operatív tárban kezelni azokat. 
+A tárolt adatok formátuma egyszerű {\it n}-tuple ({\it n}-es), amelyekben csak primitív értékek, mint egész-, vagy tört számok vagy szövegek állhatnak.
+Nincs lehetőség az egyes tárolt elemek között kapcsolatok létrehozására, se {\it n}-tuple értékek egymásba ágyazására. 
+Az értékek lekérdezése csak egyesével egy egyszerű minta-illesztési ({\it pattern match}) szemantikát követve végezhető el.
+
+\subsection[A Linda nyelv]
+
+A feladat fő célja, hogy az elkészített adatbázist a Linda nyelv megvalósítására lehessen használni.
+Ennek megfelelően az alábbiakban a Linda nyelv ismertetésére kerül sor, ami után az adatbázis interfészét lehetséges definiálni.
+
+A Linda nyelv egy egyszerű bővítményként kezelhető a legegyszerűbb leírása szerint. 
+Alapvetően egy másik, magában is teljes programozási nyelvbe épül be, amelybe hat extra szabad függvényt (\ital{free function}) definiál.
+Ezek a függvények a gazdanyelvben globálisan elérhetőek, és nem igényelnek külön fejlécfájlt (\ital{header}), csomagot (\ital{package}), modult vagy egyéb a választott nyelv által definiált egységet, amely definiálja az adott függvényeket.
+A következőkben a Linda nyelv megvalósításához használt gazda nyelv a C programozási nyelv.
+
+A függvények használatához egyes esetekben szükség van még egy szintaktikai elemre. 
+Ez a \ital{? operátor}, amely az adatbázis lekérdezéseknél használatos elem, amivel a keresett {\it n}-tuple egy elemének értéke kihagyható.
+Ilyen esetekben a többi érték szerint történik a keresés, és azok által meghatározott \ital{n}-tuple megfelelő elemének értéke a változóba kerül.
+Használatában hasonlít a C-ben található címképző operátorhoz (\ital{\char`\&}), viszont csak az adatbázist olvasó függvényekben értelmezett.
+
+\code[A kérdőjel operátor]
+\line{\indent\type{int} \var{x};\hfil}
+\line{\indent\fn{in}(\litstr{"string"}, \op{?}\var{x});\hfil}
+\line{\indent\fn{printf}(\litstr{"x: \char`\%d"}, \var{x});\hfil}
+\endcode
+
+A szintaktika mellett a függvények értelmezéséhez szükség van egy futásidejű környezetre, amely az adott függvények funkcionalitását biztosítja.
+Erről a futtató környezetről garantálja, hogy létezik egy olyan tuple tér (\ital{tuple space}), amelyre az összes adott processzből indított Linda függvényhívás, ugyanabba a tuple térbe érkezik.
+Ennek a tulajdonságnak köszönhetően a Linda nyelv által biztosított függvények 1) egyszerű processz-közi kommunikációt (\ital{interprocess communication}, IPC) valósítanak meg a saját processzből indított további processzek között;
+ és 2) részhalmazuk szinkronizációs eszközként is használható. 
+
+\vskip.2cm
+A Linda nyelv által definiált függvények listája:
+\vskip.1cm
+
+\indent\hbox to.4cm{\out\hss}
+\par A függvény a paramétereiből képzett \ital{n}-tuple értéket az adatbázisba tölti.
+
+\vskip.1cm
+\indent\hbox to.4cm{\in\hss}
+\par Kétféle működésre képes.
+
+Amennyiben minden érték megadásra került a paramétereiben, tehát nincs benne ? operátor, akkor a paramétereiből képzett \ital{n}-tuple értékét kiveszi a tuple térből.
+Ha ez jelenleg nem található meg benne, akkor a processz várakozni kezd, addig, amíg ez bele nem kerül, majd kiveszi azt.
+
+A másik lehetőség, amikor paraméterezett tuple értéket kérdezünk le.
+Ilyenkor valahány elem helyére egy változó ? operátorral képzett kifejezése kerül. 
+Ebben az esetben egy olyan tuple értéket vesz ki az adatbázisból, amelyik a konkrétan megadott értékeknek megfelel, és a nem specifikált elemek helyére pedig a talált tuple megfelelő értéke kerül.
+Ha nem található a keresésnek megfelelő tuple, akkor ebben az esetben is várakozik, amíg bele nem kerül a tuple térbe egy megfelelő tuple.
+
+\vskip.1cm
+\indent\hbox to.4cm{\rd\hss}
+\par Az \in függvényhez hasonló működésű függvény, a különbség, hogy ha talált a tuple térben megfelelő tuple értéket, akkor visszatér, de nem veszi ki azt az adatbázisból.
+Emiatt más processzek is olvashatják, anélkül, hogy valakinek ismételten bele kellene raknia a tuple térbe azt.
+
+\vskip.1cm
+\indent\hbox to.4cm{\inp\hss}
+\par Megpróbálja az \in függvény szemantikájának megfelelően megkeresni a tuple térben a paramétereiből képzett tuple értéket, de azonnal visszatér logikailag hamis értékkel ha ez nem sikerül.
+
+\vskip.1cm
+\indent\hbox to.4cm{\rdp\hss}
+\par Megpróbálja az \rd függvény szemantikájának megfelelően megkeresni a tuple térben a paramétereiből képzett tuple értéket, de azonnal visszatér logikailag hamis értékkel ha ez nem sikerül.
+
+\vskip.1cm
+\indent\hbox to.4cm{\eval\hss}
+\par Az \out függvényhez hasonlóan, az \eval is a tuple térbe helyez elemeket, azonban ha egyes paramétereinek függvények vannak megadva, akkor azok nem a lokális processzben kerülnek kiértékelésre.
+Ilyen esetekben a kiértékelés egy-egy másik processzen történik, ahonnan csak a végeredmény érkezik vissza, majd a megadott értékekből, és a visszakapott számítások eredményéből képzett \ital{n}-tuple kerül az adatbázisba.
+
+\subsection[Az adatbázis]
+
+Az előzőek alapján a megvalósítandó adatbázis képességei a következőek.
+
+Képesnek kell lennie bármilyen \ital{n}-re eltárolnia \ital{n}-tuple értékeket, azt visszakereshető módon.
+
+Minden tuple elem értéke egy primitív érték.
+Egy primitív érték vagy egy string, vagy egy egész szám, ami fizikai memóriában 16, 32 vagy 64 bites, vagy egy lebegőpontos szám, ami egyszeres (\ital{single}, C \ital{float} típusával megfeleltethető) vagy kétszeres (\ital{double}) pontossággal rendelkezik.
+
+Adott processzek között képesnek kell lennie konzisztens állapotban tartania az adatbázist, miszerint az egyes processzeknek mindig friss adatot kell tudnia olvasnia, ha egy másik processz írt vagy törölt valamit.
+
+Egyes processzeknek tudnia kell hatékonyan várakozni az adatbázison, amíg az ő keresési feltételüknek megfelelő adat nem érkezik az adatbázisba.
+Ezt anélkül lehessen megoldani, hogy folyamatosan az adatbázist kell figyelni, kapjon valamilyen formában értesítést a processz a közös tuple tér változásáról.
+
+\section[Megvalósítás]
+
+A megvalósítás LindaDB néven C++20-ban történt, több helyen kihasználva a nyelv modern lehetőségeit.
+Az egyes létrehozott adatszerkezetek, sok helyet teljes támogatást biztosítanak általános használatra, biztosítanak olyan műveleteket, amelyekre az egyes szabványos függvényeknek van szüksége.
+Például, az alább tárgyalt {\ibmmono \ascolor[type]{ldb::data::chunked_list}<class \ascolor[type]{T}, \ascolor[type]{std::size_t} \ascolor[var]{ChunkSize}>} iterátorait lehetséges a szabványos iterátorok helyén használni.
+
+\subsection[Adattárolás]
+
+Az adatokat egy saját készítésű adatszerkezet tárolja.
+Alább látható egy ábra arról, hogy nagyvonalakban, hogy néz ki memóriában az adatszerkezet.
+Ez a szerkezet biztosítja, hogy mind az iterátorok mindig érvényesek maradnak, akár hozzáfűznek vagy törölnek az adatok közül, mind az adatokra képzett iterátorok összehasonlíthatóak. 
+Ennek megfelelően a \ital{LegacyBidirectionalIterator} nevesített követelményt (\ital{named requirement}) teljesítik, hiszen lehetséges előre és hátra is léptetni őket.
+Az \ital{LegacyRandomAccessIterator} nevesített követelményt nem tudják teljesíteni, mert egy adott index eléréséhez sükség van, hogy minden egyes szegmensen végiglépkedve kiszámoljuk, hogy melyik az adott index alatt elhelyezkedő elem.
+Hasonlóan egy iterátorhoz való $n$ hozzáadása esetén, lehetséges, hogy át kell lépni a következő szegmensbe, ahol pedig lehetséges hogy nincs elég elem, hogy a megfelelő számot előre lépjünk.
+Ennek megfelelően, lehetséges, hogy egy iterátor indexelésnél az egész listát be kell járni, ami sérti a szemantikai követelményeit a \ital{LegacyRandomAccessIterator} nevesített követelménynek, miszerint konstans időben lehetséges ezt megtenni.
+
+\vskip.5cm
+\input chunked_list.tikz
+\figuredesc{Szegmenselt lista}
+\vskip.5cm
+
+Az adatok alapvetően egy vektorban tárolt pointereken keresztül elérhető memória szegmensekben (\ital{chunk}) vannak tárolva.
+Egy-egy ilyen szegmens mindig statikus méretű, amikor megtelik egy új szegmens kerül lefoglalásra, amikor minden elem törlődik
+belőle, akkor a szegmens is törlődik.
+A szegmens, elemszámát, és hogy melyik mezője szabad, vagy foglalt, bitenként tárolja egy, a meghatározott számú mező tárolására elegendő, de lehető legkisebb, fordítási időben kiválasztott egész típus bitjeiben.
+Egyes mezők ellenőrzése egy bitmaszkolási művelet, míg az elemszámot egy \ital{popcount} művelettel végzi.
+
+A szegmenseket egy {\ibmmono std::vector<std::unique_ptr<\ital{szegmens típus}>>} adattagban tárolja.
+Ennek köszönhetően, amikor hozzáfűzni kell az adatbázishoz, akkor egyszerűen csak a legutolsó szabad szegmensbe beszúrunk, vagy ha az már nincs ilyen, akkor szimplán felveszünk még egy szegmenst és abba szúrjuk be az elemet.
+Mivel az egyes vektor elemei nem maguk a szegmensek, hanem csak a szegmenseket birtokló mutatók, így ha beszúrás, vagy bármely más művelet miatt, a vektor alatti tömböt újra kell foglalni, és így átkerül máshova, az iterátorok nem invalidálódnak.
+Ez a tulajdonság hasonló egy egyszerű láncolt listához, viszont jobb memória kihasználtsággal rendelkezik az adatszerkezet, egy listához képest.
+
+Vegyünk egy egyszerű, egyirányba láncolt listát, 8 byteos mutatókkal. Az adat, amit tárolunk 8 byte, összesen 32 darab van belőle.
+Így a teljes memóriaigénye a listának byteban: $$ 32 * (8 + 8) = 512 $$
+
+Ezzel szemben a szegmenselt lista, ugyan ezen adatokkal, 8 elemű szegmensekkel, szintén byteban: $$ 24 + 8 + 8 * 4 + (1 + 8 + 8 + 8 * 8) * 4 = 396 $$
+A számításban a 24 byte az elsődleges vektor adminisztratív kültsége (8 byte mutató a tömbre, 8 byte méret és 8 byte kapacitás), míg a zárojelezett rész egy szegmens. 
+Eltároljuk még, az utolsó olyan szegmenst, amelyikből utoljára töröltünk, ez egy index, így 8 byte.
+A következő $8 * 2$ a vektor tömbje, amiben két pointer van.
+Ebben található a legkisebb méretű olyan szám, aminek a bitszáma elég, hogy $n$ elemet tároljon egy $n$ elemű szegmensben.
+Ez jelenleg egy {\ibmmono \ascolor[type]{unsigned char}}, ami 1 byte.
+A következő kettő 8 byte a birtokló szegmensel lista objektumra mutató mutató, és a szegmens indexének száma, a $8 * 8$ pedig a 8 darab 8 byte méretű tárolt elem.
+
+Ez a tulajdonság elromlik, ha sok közel üres szegmens marad a rendszerben, amit nem tudunk törölni, mert különben sérülne, hogy az iterátorok mindig érvényesek maradnak.
+Ennek elkerülése végett, minden törlésnél az indexét annak a szegmensnek, amiből töröltünk eltároljuk, így a következő beszúrás abba az szegmensbe kerül.
+Ezzel elérhető, hogy a beszúrás ideje konstans maradjon (hiszen nem kell végignézni a teljes tartalmat, hogy üres helyet találjunk), illetve azt is elkerüljük, hogy az egyes szegmensek alacson töltöttséggel üzemeljenek.
+Utóbbi annyira fontos, hogy már csupán 50\char`\%-os kihasználtság esetén, az egyszerű lista minden esetben jobb memóriakihasználtsággal rendelkezik.
+Az alább látható grafikonon, 512 elemet próbálunk eltárolni, növekvő szegmens mérettel, egy egyszerű listával és két szegmenselt listával, ahol az egyikben csak 50\char`\%\space\space az egyes szegmensek kihasználtsága.
+Az X tengely a szegmensek mérete, 16-tól, 512-ig lineárisan növekszik.
+
+\epsfxsize=15cm
+\epsfbox{bad_chunking.eps}
+\figuredesc{Rossz hatékonyságú szegmenselt lista}
+
+Mivel a szegmensek ismerik a saját tartalmazójukat, így iteráció esetén, mindig a magukon való túlindexelés esetén tudják továbbítani a kérést, így a fő vektort tartalmazó objektum továbbíthatja a következő szegmensnek.
+Emellett még a mindenkori indexüket is ismerik a fő vektorban, így két iterátor esetén, konstans időben eldőnthető, hogy melyik van előbb, mint a másik, pont, mint egy tömbre mutató pointerek esetén.
+
+Ezekkel a tulajdonságokkal megvalósítható hatékonyan a listához hozzáadás (vagy a végére, vagy a közepére, ahol van hely), a törlés (egy bit átírása, és a visszaadott elem move konstruktorának hívása), és bár nem teljesen éri el a egy vektor iterálását, egy átlagos láncolt szerkezetnél hatékonyabban, és cache barátiabban iterálható.
+A teljes iteráció nyilván olyankor kell, amikor keresünk az adatbázisban.
+Viszont ez rendes, diszk rezidens adatbázisokban is az elsődleges lassulás oka, a teljes tábla végigolvasása.
+Mivel az adatszerkezetünk képes kényelmesen kezelni kötött adatokat--jelen esetben iterátorokat--hiszen soha nem invalidálja még érvényes adat iterátorát, így feltárul a lehetőség, hogy indexeket építsünk az elsődleges adatszerkezet főlé, ezzel megkönnyítve a keresését.
+
+\subsection[Adatbázis indexek]
+
+Az előző szekcióban leírásra került, hogy milyen adatszerkezetben kerülnek tárolásra az adatok.
+Mivel ebben a szerkezetben való keresés nem hatékony, hiszen mindig egy teljes végigolvasást igényelne, így, a gyakorlati használatban is ismert adatbáziskezelőkhöz hasonlóan, a Linda nyelv megvalósítás ezen adatbázisa is indexeket vezet be az adatok gyorsabb elérésére.
+
+Diszk rezidens adatbázisok elsődlegesen egy B-fa valamelyen variációjával (B+-fa, B*-fa, UB-fa, stb.) szokták (vagy valamilyen hash alapű adatszerkezettel) az indexelést megvalósítani, hiszen egy blokkos háttértáron való tároláshoz a blokkos szervezése nagyon kényelmes.
+Operatív tárban azonban sokkal hatékonyabb, ha nem egy B-fa variánst alkalmazunk, bár a konstans blokk alapú elérést biztosítják, viszont az operatív tárban való véletlen címektre ugrást elkerülendő, valamilyen bináris keresőfa használata, amivel lehetséges kevessebb mutató követéssel elérni egyes adatokat.
+
+Az egyszerű bináris keresőfák problémája, hogy mivel nem rendezik át magukat semmilyen esetben, így egyes bemenetek esetén a mélységük $n$-el lesz arányos. 
+Legrosszabb esetben, például egy szigorúan monoton növekvő bemenet esetén, egy egyszerű listává romlik vissza a hatékonyságuk.
+Erre a problémára léteznek önrendező bináris keresőfák, amelyek minden bemenet után végrehajtanak bizonyos fa forgatásokat, így garantálva, hogy a fa mélysége csak $\log{n}$ mértékben nő.
+Ennek megvalósítására több algoritmus létezik; például az AVL-fa, és a piros-fekete fa két gyakran használt alternatíva.
+
+Jelenleg AVL-fa alapú megvalósítást használunk, mivel az AVL fák szigorúbb rendezettséget biztosítanak a piros-fekete fákhoz képest, átlagosan lassabb beszúrás ellenében.
+Ennek megfelelően, a fa magassága átlagosan alacsonyabb egy AVL-fa esetében, így a keresés áltagos ideje jobb.
+
+A probléma azonban az egyszerű bináris keresőfákkal, hogy a memóriakihasználtságuk nem hatékony, minden elemhez szükség van a két gyerek elemre mutató mutató eltárolására, ami 8 byteos mutatók esetén minden elemhez 16 byte overheadet tárol.
+Emellett iteratív megvalósítások esetén, amik nagy mennyiségű adat tárolása edetén szükgégesen adódnak, egy-egy gyereket szülőre mutató mutatóval is el kell látani, külünben nem lehetséges egy részfából a visszalépés.
+A jelenleg megvalósított fa szerkezet is iteratív, így az adott rendszer stack mérete nem korlátozza a tárolt adatok méretét.
+Erre az alapköltségre ráépítenek még az önrendező fa algoritmusok, amelyeknek az extra memóriaigényükkel számolni kell, amiben az adatokat tárolják, amivel a rendezést megvalósítják.
+A használt AVL-fák esetében ez egyszerűen 1 byte, mivel a jelenlegi részva rendezettségét tárolandó 3 érték eltárolható benne.
+Mikrooptimalizált megvalósítások megpróbálhatják a jelenleg használt 1 byteot a valójában szükséges 2 bitre csökkenteni, akár a pointerek alignment értékéből következő szabad bitekbe beleírva, de ez nagyon nem szép, és sok nagyon elővigyázatos memória elérést igényel, amivel az egyszerű memória címzések is extra műveleteket igényelnének, így ezzel a lehetőséggel nem él a jelenlegi implementáció. 
+
+Ezt a memória pazarlást elkerülendő, az előzőekben említett nem szép és igazából minimális spórolást elérő lehetőséggel ellentétben, a T-fa egy olyan speciális fa adatszerkezet, amelyik az egyes csúcspontokban nem egy-egy elemet tárol, hanem egy rendezett tömböt.
+A rendezett tömb első eleménél kisebb elemek találhatóak a bal gyerekben, míg a legutolsó eleménél nagyobbak találhatóak a jobb gyerekben, így megmarad a bináris keresőfa tulajdonság. 
+Ezzel a megvalósítással egy-egy csúcshoz tartozó mutatók overheadje kisebb az adat méretéhez képest (hiszen amíg túl nagy az overhead, addig az tömb mérete növelhető, így közel tetszőleges memóriahatékonyság elérhető).
+A T-fa algoritmus azonban nem definiálja, hogy milyen önrendező algoritmust használ az a fa szerkezet, amelybe beépül.
+Ennek megfelelően, az eddigi AVL-fa szerkezetbe csak annyi átírás eszközölendő, hogy képes legyen kezelni mind egy, mind több elemű hasznos adatot. 
+Ezt a hasznos adat tárolás elabsztrahálásával egy {\ibmmono avl2_tree<Payload>} sablon bevezetésével lehetséges, így elérhető, hogy az AVL-fa megvalósítás megfelelő hasznos adatot tároló sablon paraméter esetén, akár egyszerű AVL-faként, akár T-faként viselkedjen.
+Megjegyzendő, hogy a tényleges definíció az alábbi, míg az előbb közölt a magyarázatot szolgálja.
+
+\code[Az általános AVL-fa szerkezet]
+\cline{template<class \type{K},}
+\cline{\hskip2.12cm class \type V,}
+\cline{\hskip2.12cm \type{std::size_t} \var{Chunking} = \litnum{0},}
+\cline{\hskip2.12cm payload \type{Payload} = }
+\cline{\hskip4.42cm          typename \type{ldb::index::tree::payload_dispatcher}<}
+\cline{\hskip6.63cm 										\type{K}, \type{V}, \var{Chunking}>::type>}
+\cline{struct \type{avl2_tree} \char`\{...\char`\};}
+\endcode
+
+Ez a szerkezet már sokkal memória hatékonyabb egy egyszerű AVL-fánál, amellett, hogy mivel több elem fér egy csúcsba, így a fa mélysége is kisebb, bár csak egy konstans faktorral.
+Azonban a jelenlegi felhasználás mellett a kulcsok, ami szerint tároljuk az adatokat, nem biztosítanak egyediséget. 
+Például a következő három tuple teljességükben páronként különbözőek, viszont az egyes elemeik közül semelyik sem biztosít egyediséget, így nem lehet rájuk egyedi indexet építeni.
+
+$$\vbox{\halign{\hss(#, &#, &#)\hss\cr
+	1 & "alma" & 41\cr
+	1 & "körte" & 42\cr
+	2 & "alma" & 42\cr}}$$
+
+Ennek következtében, minden épített indexben lehetséges, hogy ugyan az a kulcs többször is szerepelhet.
+Ha minden T-fa cellába, csak egy kulcs-érték párt tárolunk el, akkor lehetséges, hogy a fa nagy része ugyanazzal a kulcs értékkel lesz feltöltve, és mindegyik különböző értékeket tárol.
+Viszont egy bináris keresőfa, még ha egy komplexebb megvalósításban, mint pl. egy AVL-, vagy T-fa, akkor is a kulcs szerint rendezett, így az értékek nem definiált sorrendben lesznek a fában.
+Emiatt akárhányszor keresnénk egy nem egyedi kulcsra, az összes olyan csúcspontot be kellene járni, amibe belekerült legalább egy keresett kulcsérték.
+
+Erre a megoldás, hogy minden T-fa cella, egy-egy skaláris kulcs és érték helyett, egy kulcshoz értékek egy vektorát tárolja.
+Ezt az vektort pedig rendezve elérhető, hogy a minden keresés $\logˇ2{nˇk}+\logˇ2{nˇe(k)}$ idővel arányosan végrehajtható, ahol az $nˇk$ a kulcsok száma, $nˇe(k)$ pedig az értékek száma adott $k$ kulcs esetén.
+Ennek a közelítőleges memória ábrája látható alább, amiből következik az elnevezése, miszerint ezt az adatszerkezetet \ital{csillingelő-fának} neveztem el.
+
+Fejlesztési lehetőség lehet valamilyen dinamikusan változó szerkezet, amely nagy $nˇe(k)$ esetén a rendezett vektort is lecseréli egy T-fa szerkezetre, így nem lesz szükség nagyon nagy összefüggő memória részekre, és megsprórolható a beszúrások esetén az esetleges tömb teljes másolása. 
+Itt a tárolt adatok mindig egyediek, így a csillingelő-fa által bevezetett indirekció megspórolható.
+Ennek tényleges hasznosságát ki kellene mérni.
+
+<<csillingelő fa ábra>>
+
+Ezzel az adatszerkezettel, mint indexel, már leírható a Linda nyelv megvalósításához készített adatbázis jelenlegi állapota.
+Az előző szubszekcióban leírt szegmenselt lista, ami az elsődleges adattárolást valósítja meg, ami köré kerülnek a csillingelő-fa indexek.
+Jelenleg, mivel a tárolt \ital{n}-tuple értékek esetén, a \ital{n} értéke lehet tetszőlegesen nagy (nyilván a memória limitációin belül), így statikus darabszámú indexel nem lehetséges megoldani, hogy minden elemre lehessen megvalósítani indexelt elérést.
+Ennek megfelelően, mivel az indexek karbantartása is plusz erőforrásokat és időt venne igénybe, amire még a dinamikusan szervezett indexek dinamicitásának karbantartási igénye is ráépül, a jelenlegi megvalósítás nem él ezzel a lehetőséggel.
+Helyette statikusan kettő darab indexet épít, az első két elemre, és ezeket használja a keresések gyorsított elérésére.
+Ezt a gyorsítási próbálkozást lehetséges kijátszani, így ha a keresett tuple első két eleméből mind kettő ? operátorral képzett kifejezés, és így nem hajtható rajta keresés végre.
+Ilyen esetekben egy teljes végigolvasásra kényszerül az adatbázis, így ezek a keresések jelentősen lasabbak azoknál, amelyek nem rendelkeznek ezzel a problémával.
+
+Jelenleg a keresés egy elég primitív algoritmus szerint hajtódik végre, lekérdezésoptimalizáció nem történik.
+Az első olyan index szerint történik a keresés, amelyik értéke konkrétan meg van adva; ennek következtében a keresések legtöbbje az első indexű indexet használja.
+Itt a lekérdezésoptimalizácira számos lehetőség adódik, például az egyes kulcsokhoz tartozó vektorok mérete az adott index szerint, amellett, hogy milyen magas a fa; ezekkel már becslés szinten eldönthető, hogy melyik érdemesebb irány a keresésre.
+Ezek nem lettek implementálva.
+Végül alább látható egy ábra a jelenlegi teljes adatbázis állapotáról.
+
+\subsection[Konzisztencia]
+
+Az adatbázis a konzisztenciát úgy biztosítja, hogy minden beszúrás esetén a többi futó processzt értesíti, hogy beszúrás történt, így azok is fel tudják dolgozni, és beszúrni magukba azt.
+Hasonlóan a törlés esetén is, értesítődnek a többi processzek.
+
+Ehhez egy típus kitörölt (\ital{type erased}) függvény típuson ({\ibmmono std::function<...>}) keresztül történik a megvalósítás, így esetleges más kommuikációs technológia esetén is könnyedén lehetséges az adatbázis integrálása.
+Ez a függvény egy másik függvényt ad vissza. 
+Erre azért van szükség, hogy az aszinkron kommunikáció alapú megvalósítás esetén, az lokális adatbázis tudja a saját magán elvégzendő beszúrást vagy törlést végrehajtani, amíg a kommunikáció történik.
+Az első függvény csak elindítja a kommunikációt, de azt aszinkron módon, és a visszaadott függvény az, amelyik addig várakozik, amelyik az be nem fejeződik.
+A kettő között pedig lehet az előbb említett lokális feladatot végrehajtani. 
+
+\bye

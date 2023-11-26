@@ -1,0 +1,133 @@
+\catcode`\_=11
+
+% Primitive font set
+\font\ibmserif"[fonts/IBMPlexSerif-Light.ttf]" at 11pt
+\font\ibmserifBig="[fonts/IBMPlexSerif-Light.ttf]" at 21pt
+\font\ibmserifbig="[fonts/IBMPlexSerif-Light.ttf]" at 17pt
+\font\ibmserifbigi="[fonts/IBMPlexSerif-LightItalic.ttf]" at 17pt
+\font\ibmserifb="[fonts/IBMPlexSerif-Medium.ttf]" at 11pt
+\font\ibmserifi="[fonts/IBMPlexSerif-LightItalic.ttf]" at 11pt
+\font\ibmserifbi="[fonts/IBMPlexSerif-MediumItalic.ttf]" at 11pt
+\font\ibmmono="[fonts/IBMPlexMono-Text.ttf]" at 11pt
+\font\ibmmonob="[fonts/IBMPlexMono-Bold.ttf]" at 11pt
+\font\ibmmonoi="[fonts/IBMPlexMono-Italic.ttf]" at 11pt
+\font\ibmmonobi="[fonts/IBMPlexMono-BoldItalic.ttf]" at 11pt
+
+% Semantic fonts
+\font\roman=\fontname\ibmserif
+\font\rm=\fontname\ibmserif
+\font\it=\fontname\ibmserifi
+\font\bf=\fontname\ibmserifb
+\font\fnt_title=\fontname\ibmserifBig
+\font\fnt_code=\fontname\ibmmono
+\font\fnt_subtitle=\fontname\ibmserifbigi
+\font\fnt_section=\fontname\ibmserifbig
+\font\fnt_subsection=\fontname\ibmserifbigi
+\font\fnt_figure=\fontname\ibmserifb
+
+% Font setter macros
+\def\title#1{\fnt_title #1}
+\def\subtitle#1{\fnt_subtitle #1}
+\def\bold#1{{\bf #1}}
+\def\ital#1{{\it #1}}
+\def\itbo#1{\ibmserifbi #1}
+
+% coloring
+\input{bodand-coloring.tex}
+\input{tokyo-night.day.tex}
+
+\countdef\ex_code_num=130
+\ex_code_num=0
+
+\newbox\codetitlebox
+\newdimen\codetitlebox_w
+\def\code[#1]{%
+	\vskip.42cm
+	\advance\ex_code_num by 1
+	\def\type{\ascolor[type]}
+	\def\fn{\ascolor[fn]}
+	\def\var{\ascolor[var]}
+	\def\op{\ascolor[op]}
+	\def\litstr{\ascolor[litstr]}
+	\def\litnum{\ascolor[litnum]}
+	\indent\hbox{%
+		\hss%
+		\vbox{
+			\hbox{\fnt_code \the\ex_code_num. \hskip-7pt Példa #1}
+			\hrule{}
+		}
+		\hss%
+	}
+	\vskip3pt
+	\fnt_code
+}
+\def\cline#1{\line{\indent #1\hss}}
+\def\endcode{
+\vfil
+\roman
+\vskip.42cm}
+
+\countdef\section_num=128
+\countdef\subsection_num=129
+\section_num=0
+\subsection_num=0
+
+\dimendef\section_around=128
+\dimendef\subsection_around=128
+\section_around=16pt
+\subsection_around=11pt
+
+\def\section[#1]{
+	\vfil\break
+	\advance\section_num by 1
+	{\fnt_section \noindent\the\section_num. #1}
+	\subsection_num=0
+	\expandafter\vskip\the\section_around
+	\relax
+}
+
+\def\subsection[#1]{
+	\expandafter\vskip\the\subsection_around
+	\advance\subsection_num by 1
+	{\fnt_subsection \noindent\the\section_num.\the\subsection_num. #1}
+	\expandafter\vskip\the\subsection_around
+	\relax
+}
+
+\countdef\figure_num=131
+\figure_num=0
+
+\def\figuredesc#1{%
+	\vskip3pt
+	\advance\figure_num by 1
+	\vbox{\fnt_figure \hbox to\hsize{\hss\the\figure_num. Ábra #1\hss}\vskip.314cm}
+	\relax
+}
+
+% Footer
+%\footline=\hbox{\centerline{\folio}}
+\footline={\vbox{%
+	\ifnum\folio=1%
+		{\hss}%
+	\else%
+		\centerline{$-$\folio$-$}%
+	\fi
+}}
+
+% Utilities
+\def\titlepage#1#2by#3date#4{
+  \vbox{
+    \vskip4.5cm
+    \centerline{\title{#1}}
+  }
+  \vskip.3cm
+  \centerline{\subtitle{#2}}
+  \vskip.3cm
+  \centerline{#4}
+  \vskip1cm
+  \centerline{#3}
+  \vfil\break
+}
+
+\catcode`\ˇ=8
+\roman
